@@ -1,0 +1,49 @@
+select  v.garment_style                     style_cd
+            ,   v.cutting_alt
+            ,   v.cut_plant
+            ,   v.sew_plant
+            ,   v.size_cd
+            ,   v.spread_comp_cd
+            ,   decode(v.size_cd,'%',4,0)
+              + decode(v.cut_plant,'%',2,0)
+              + decode(v.sew_plant,'%',1,0)         priority
+            ,   v.loss_factor
+        --  ,   substr(user,instr(user,'$')+1,8)    user_id
+            ,   sysdate                             create_date
+        --  ,   sysdate                             update_date
+        from
+           (select  z.garment_style
+                ,   z.cutting_alt
+                ,   z.cut_plant
+                ,   z.sew_plant
+                ,   substr(decode(rtrim(z.size_id),null,'%',oprsql.lts_util.lts_to_aps_size(rtrim(z.garment_style),trim(z.size_id))),1,2)
+                                                                    size_cd
+                ,   substr(z.sort_area,7+n*2,2)                     spread_comp_cd
+                ,   to_number(substr(z.sort_area,20+n*5,5))/10000   loss_factor
+            from    style                   y
+              ,(select  rtrim(t7gsty)                       garment_style
+                    ,   t7altc                              cutting_alt
+                    ,   decode(t7cutp,'00','%',t7cutp)      cut_plant
+                    ,   decode(t7sewp,'00','%',t7sewp)      sew_plant
+                    ,   t7gsiz                              size_id
+                    ,   max(lpad(to_char(t7efdt),8,'0')
+                         || rpad(substr(t7part,1,length(t7part)-length(ltrim(t7part,'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'))),16)
+                         || to_char(t7los1,'s00v00')
+                         || to_char(t7los2,'s00v00')
+                         || to_char(t7los3,'s00v00')
+                         || to_char(t7los4,'s00v00')
+                         || to_char(t7los5,'s00v00')
+                         || to_char(t7los6,'s00v00')
+                         || to_char(t7los7,'s00v00')
+                         || to_char(t7los8,'s00v00'))       sort_area
+                from    OPLIB.OPP028@"HQ400B"
+        where to_date(t7efdt,'YYYYMMDD') <= sysdate
+                group by t7gsty
+                    ,    t7altc
+                    ,    t7cutp
+                    ,    t7sewp
+                    ,    t7gsiz)        z
+              ,(select rownum n from (select null from dual group by cube(1,2,4)))
+            where   rtrim(substr(sort_area,7+n*2,2)) is not null -- spread_comp_cd
+              and   y.style_cd      = z.garment_style)  v
+            ;
